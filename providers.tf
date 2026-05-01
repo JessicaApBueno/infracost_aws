@@ -10,13 +10,16 @@ terraform {
 provider "aws" {
   region = "us-east-1"
 
-  # Uma boa prática de arquiteto é taguear tudo!
-  # Isso ajuda muito em FinOps para identificar de onde vem o custo.
+  # O bloco default_tags aplica essas etiquetas a TODOS os recursos 
+  # criados por este provider automaticamente.
   default_tags {
     tags = {
-      Project   = "FinOps-Infracost-Study"
-      Owner     = "CommunityBuilder"
-      ManagedBy = "Terraform"
+      Project     = "FinOps-Infracost-Study"
+      Owner       = "CommunityBuilder"
+      ManagedBy   = "Terraform"
+      # Novas tags para satisfazer as políticas de FinOps:
+      Environment = "Dev"
+      Service     = "FinOps-Project"
     }
   }
 }
