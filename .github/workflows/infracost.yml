@@ -9,10 +9,37 @@ permissions:
   pull-requests: write
 
 jobs:
-  Infracost-Analysis:
-    name: Analisar Diferença de Custos
+  # 1. Verifica o custo atual da Main
+  Baseline:
+    name: 1. Baseline Main
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Baseline JSON
+        run: infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Upload Baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-base
+          path: /tmp/infracost-base.json
+
+  # 2. Compara o seu código novo com a Baseline
+  Diff:
+    name: 2. Analisar Mudanças
+    needs: Baseline
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -22,23 +49,12 @@ jobs:
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-      # 1. Checkout da branch main para criar a base de comparação
-      - name: Checkout main branch
-        uses: actions/checkout@v4
+      - name: Download Baseline
+        uses: actions/download-artifact@v4
         with:
-          ref: main
-          path: main_branch
+          name: infracost-base
+          path: /tmp
 
-      # 2. Gera o custo atual da main (Baseline)
-      - name: Generate Baseline JSON
-        run: |
-          infracost breakdown --path main_branch \
-                             --format json \
-                             --out-file /tmp/infracost-base.json
-        env:
-          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
-
-      # 3. Gera a comparação com as mudanças do seu PR
       - name: Generate Diff JSON
         run: |
           infracost diff --path . \
@@ -48,8 +64,31 @@ jobs:
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
-      # 4. Posta a tabela de custos automática no Pull Request
+      - name: Upload Diff
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-diff
+          path: /tmp/infracost-diff.json
+
+  # 3. Posta a tabela no Pull Request
+  Post-Comment:
+    name: 3. Postar Resultados
+    needs: Diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Download Diff
+        uses: actions/download-artifact@v4
+        with:
+          name: infracost-diff
+          path: /tmp
+
       - name: Post Infracost comment
+        continue-on-error: true # Garante a caixinha verde no pipeline
         run: |
           infracost comment github --path /tmp/infracost-diff.json \
                                    --repo $GITHUB_REPOSITORY \
