@@ -4,7 +4,7 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "instance_type" {
+variable "t3.large" {
   description = "Tipo da instância EC2 para o servidor web"
   type        = string
 }
