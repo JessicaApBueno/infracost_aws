@@ -39,6 +39,8 @@ jobs:
       # Gera a estimativa de custos
       - name: Generate Infracost JSON
         run: infracost breakdown --path . --format json --out-file /tmp/infracost.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
       # Comenta no Pull Request com a tabela de custos
       - name: Post Infracost comment
@@ -47,3 +49,5 @@ jobs:
                                    --repo $GITHUB_REPOSITORY \
                                    --pull-request ${{ github.event.pull_request.number }} \
                                    --behavior update
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
