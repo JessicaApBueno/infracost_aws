@@ -9,58 +9,63 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Caixinha 1: Autenticação AWS
-  Auth-AWS:
+  # Caixinha 1: Prepara o terreno
+  Setup:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout base
         uses: actions/checkout@v4
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+  # Caixinha 2: Faz o cálculo (Precisa de AWS + Infracost)
+  Generate-Cost:
+    needs: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-  # Caixinha 2: Setup das Ferramentas
-  Setup-Tools:
-    needs: Auth-AWS
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
       - name: Setup Infracost
         uses: infracost/actions/setup@v3
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-  # Caixinha 3: Análise de Custos
-  Generate-Cost:
-    needs: Setup-Tools
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout base
-        uses: actions/checkout@v4
       - name: Generate Infracost JSON
         run: infracost breakdown --path . --format json --out-file /tmp/infracost.json
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
-      # Upload do arquivo para a próxima caixinha usar
+
       - name: Archive Infracost JSON
         uses: actions/upload-artifact@v4
         with:
           name: infracost-json
           path: /tmp/infracost.json
 
-  # Caixinha 4: Postar Comentário
+  # Caixinha 3: Posta no PR
   Post-Comment:
     needs: Generate-Cost
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
       - name: Download Infracost JSON
         uses: actions/download-artifact@v4
         with:
           name: infracost-json
           path: /tmp
+
       - name: Post Infracost comment
         run: |
           infracost comment github --path /tmp/infracost.json \
