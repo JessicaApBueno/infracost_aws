@@ -1,0 +1,49 @@
+name: Infracost
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  id-token: write   # Necessário para autenticação OIDC (Federation)
+  contents: read    # Necessário para checkout do código
+  pull-requests: write # Necessário para o Infracost postar comentários
+
+jobs:
+  infracost:
+    name: Infracost
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+
+      # Autenticação via OIDC (Workload Federation)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Instalação do Terraform para leitura dos módulos
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      # Configuração do Infracost
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+      # Gera a estimativa de custos
+      - name: Generate Infracost JSON
+        run: infracost breakdown --path . --format json --out-file /tmp/infracost.json
+
+      # Comenta no Pull Request com a tabela de custos
+      - name: Post Infracost comment
+        run: |
+          infracost comment github --path /tmp/infracost.json \
+                                   --repo $GITHUB_REPOSITORY \
+                                   --pull-request ${{ github.event.pull_request.number }} \
+                                   --behavior update
