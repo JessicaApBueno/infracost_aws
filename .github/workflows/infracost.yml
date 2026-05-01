@@ -9,7 +9,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Caixinha 1: Prepara o terreno
   Setup:
     runs-on: ubuntu-latest
     steps:
@@ -20,39 +19,49 @@ jobs:
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-  # Caixinha 2: Faz o cálculo (Precisa de AWS + Infracost)
-  Generate-Cost:
+  Generate-Diff:
     needs: Setup
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout base
+      # 1. Checkout da branch principal para saber o preço antigo
+      - name: Checkout main branch
         uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
+          ref: main
 
       - name: Setup Infracost
         uses: infracost/actions/setup@v3
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Generate Infracost JSON
-        run: infracost breakdown --path . --format json --out-file /tmp/infracost.json
+      # 2. Gera o custo da main (Baseline)
+      - name: Generate Baseline JSON
+        run: infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Archive Infracost JSON
+      # 3. Volta para o código do seu PR
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      # 4. Faz a comparação (Diff)
+      - name: Generate Diff JSON
+        run: |
+          infracost diff --path . \
+                         --format json \
+                         --compare-to /tmp/infracost-base.json \
+                         --out-file /tmp/infracost-diff.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Archive Diff JSON
         uses: actions/upload-artifact@v4
         with:
-          name: infracost-json
-          path: /tmp/infracost.json
+          name: infracost-diff
+          path: /tmp/infracost-diff.json
 
-  # Caixinha 3: Posta no PR
   Post-Comment:
-    needs: Generate-Cost
+    needs: Generate-Diff
     runs-on: ubuntu-latest
     steps:
       - name: Setup Infracost
@@ -60,15 +69,15 @@ jobs:
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Download Infracost JSON
+      - name: Download Diff JSON
         uses: actions/download-artifact@v4
         with:
-          name: infracost-json
+          name: infracost-diff
           path: /tmp
 
       - name: Post Infracost comment
         run: |
-          infracost comment github --path /tmp/infracost.json \
+          infracost comment github --path /tmp/infracost-diff.json \
                                    --repo $GITHUB_REPOSITORY \
                                    --pull-request ${{ github.event.pull_request.number }} \
                                    --github-token ${{ secrets.GITHUB_TOKEN }} \
