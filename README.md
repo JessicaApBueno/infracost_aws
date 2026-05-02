@@ -1,45 +1,131 @@
-# 🚀 FinOps Hands-On: AWS Infrastructure with Infracost & Terraform
 
-Este repositório contém um laboratório prático focado em **FinOps** e **Infraestrutura como Código (IaC)**. O objetivo é demonstrar como integrar a visibilidade de custos e emissões de carbono diretamente no ciclo de vida de desenvolvimento (Shift-Left), utilizando Terraform para provisionamento e Infracost para análise em tempo real dentro do GitHub Actions.
+# FinOps Hands-On: Custos AWS + CO₂e em Todo PR com Infracost & Terraform
 
 [![Dev.to](https://img.shields.io/badge/Dev.to-0A0A0A?style=for-the-badge&logo=devto&logoColor=white)](https://dev.to/jessicaapbueno/finops-hands-on-aws-costs-co-e-in-every-pr-with-infracost-terraform-4hjj)
 [![Medium](https://img.shields.io/badge/Medium-12100E?style=for-the-badge&logo=medium&logoColor=white)](https://medium.com/@buenojessicaaparecida/finops-hands-on-custos-aws-co%E2%82%82e-em-todo-pr-com-infracost-terraform-760583674ecf)
 
----
 
-## 🛠️ Tecnologias Utilizadas
+Este repositório contém um laboratório prático de **FinOps na AWS** usando **Terraform**, **GitHub Actions** e **Infracost**.
 
-*   **Terraform**: Orquestração de infraestrutura multicloud.
-*   **Infracost**: Estimativas de custos de nuvem e emissões de CO2e para Terraform.
-*   **AWS (Amazon Web Services)**: Provedor de nuvem utilizado.
-*   **GitHub Actions**: Automação do pipeline de CI/CD.
-*   **OIDC (OpenID Connect)**: Autenticação segura via Workload Identity Federation (sem chaves estáticas).
+A proposta é trazer visibilidade de custos para mais perto do desenvolvimento, permitindo que cada Pull Request mostre o impacto financeiro da mudança antes do deploy.
 
-## 🏗️ Estrutura do Projeto
+## Objetivo
 
-O projeto é modularizado para garantir escalabilidade e organização:
-``
+O projeto demonstra como integrar:
 
-*   **`modules/network`**: Criação da VPC, Subnets e conectividade básica.
-*   **`modules/compute`**: Instâncias EC2, Banco de Dados RDS (PostgreSQL) e S3 Buckets.
-*   **`.github/workflows`**: Pipeline de automação com Infracost em 3 estágios (Baseline, Diff e Post-Comment).
+- **Terraform** para provisionamento de infraestrutura.
+- **Infracost** para estimativa de custos antes da implantação.
+- **GitHub Actions** para automação do fluxo de CI/CD.
+- **OIDC** para autenticação segura na AWS sem chaves de longa duração.
+- **Tags padronizadas** para governança e rastreabilidade.
+- **CO₂e** como apoio a decisões mais sustentáveis.
 
-## 🔒 Segurança
+## Arquitetura
 
-Este projeto utiliza **Workload Identity Federation (OIDC)** para se comunicar com a AWS. Isso elimina a necessidade de armazenar `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` no GitHub Secrets, utilizando tokens temporários e permissões granulares de IAM Role.
+A infraestrutura está organizada em módulos:
 
-## 📊 Fluxo de Trabalho (FinOps)
+- `modules/network`: cria a base de rede com VPC, subnets e componentes de conectividade.
+- `modules/compute`: cria os recursos de aplicação e banco.
+- `.github/workflows/infracost.yml`: executa o fluxo de custo no Pull Request.
+- `providers.tf`: define o provider AWS e os `default_tags`.
+- `main.tf`: faz a orquestração entre os módulos.
+- `variables.tf` e `terraform.tfvars`: separam contrato e valores.
 
-Sempre que um **Pull Request** é aberto:
-1.  O workflow captura o custo da infraestrutura atual na branch `main` (Baseline).
-2.  Calcula a diferença de custo e impacto ambiental (Diff) com as novas alterações sugeridas.
-3.  Posta uma tabela detalhada diretamente no PR, permitindo o ajuste de rota antes do deploy.
+## Fluxo do projeto
 
-   <img width="1392" height="507" alt="Captura de tela 2026-05-01 211253" src="https://github.com/user-attachments/assets/4d7871a2-92f9-4aa0-84e7-362ada53b004" />
+1. Um Pull Request é aberto no GitHub.
+2. O GitHub Actions executa o Terraform plan.
+3. O Infracost calcula o custo estimado da mudança.
+4. O resultado é publicado como comentário no PR.
+5. O time consegue avaliar custo e impacto antes do merge.
 
+## Estrutura do repositório
 
+```bash
+infracost_aws/
+├── .github/
+│   └── workflows/
+│       └── infracost.yml
+├── modules/
+│   ├── network/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   └── compute/
+│       ├── recursos.tf
+│       ├── outputs.tf
+│       └── variables.tf
+├── main.tf
+├── outputs.tf
+├── providers.tf
+├── terraform.tfvars
+├── variables.tf
+└── README.md
+```
 
-## 📝 Artigos Detalhados
+## Pré-requisitos
+
+- Conta na AWS.
+- Repositório no GitHub.
+- Terraform instalado.
+- Conta no Infracost e API key configurada como secret.
+- Configuração de OIDC entre GitHub Actions e AWS.
+
+## Como usar
+
+### 1. Configure as variáveis
+
+Ajuste o arquivo `terraform.tfvars` conforme seu ambiente:
+
+```hcl
+aws_region        = "us-east-1"
+instance_type     = "c6g.2xlarge"
+db_instance_class = "db.t4g.medium"
+```
+
+### 2. Inicialize o Terraform
+
+```bash
+terraform init
+```
+
+### 3. Verifique o plano
+
+```bash
+terraform plan
+```
+
+### 4. Aplique a infraestrutura
+
+```bash
+terraform apply
+```
+
+### 5. Configure o GitHub Actions
+
+Garanta que os secrets e permissões estejam definidos para o workflow do Infracost funcionar corretamente.
+
+## Boas práticas aplicadas
+
+- `default_tags` no provider para padronização e rastreabilidade.
+- Separação entre `variables.tf` e `terraform.tfvars`.
+- Modularização da infraestrutura.
+- Uso de OIDC em vez de credenciais permanentes.
+- Estimativa de custos antes do merge.
+
+## Recursos principais
+
+- EC2
+- RDS PostgreSQL
+- S3
+
+## Observações
+
+- A senha do RDS não deve ficar hardcoded em ambientes reais.
+- Em produção, use AWS Secrets Manager ou outro gerenciador de segredos.
+- Ajuste as classes de instância conforme sua necessidade de custo e performance.
+
+## Artigo relacionado
 
 Para um guia passo a passo sobre como replicar este laboratório, acesse os artigos:
 
@@ -63,3 +149,6 @@ Para um guia passo a passo sobre como replicar este laboratório, acesse os arti
 
 **Desenvolvido por Jessica Aparecida Bueno.**
 ---
+## Licença
+
+Projeto educacional e de estudo.
