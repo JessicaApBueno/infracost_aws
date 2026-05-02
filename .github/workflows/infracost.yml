@@ -4,46 +4,96 @@ on:
     branches: [ main ]
 
 permissions:
-  id-token: write   # Necessário para autenticação OIDC (Federation)
-  contents: read    # Necessário para checkout do código
-  pull-requests: write # Necessário para o Infracost postar comentários
+  id-token: write
+  contents: read
+  pull-requests: write
 
 jobs:
-  infracost:
-    name: Infracost
+  # 1. Verifica o custo atual da Main
+  Baseline:
+    name: 1. Baseline Main
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout base
+      - name: Checkout main branch
         uses: actions/checkout@v4
-
-      # Autenticação via OIDC (Workload Federation)
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
+          ref: main
 
-      # Instalação do Terraform para leitura dos módulos
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      # Configuração do Infracost
       - name: Setup Infracost
         uses: infracost/actions/setup@v3
         with:
           api_key: ${{ secrets.INFRACOST_API_KEY }}
 
-      # Gera a estimativa de custos
-      - name: Generate Infracost JSON
-        run: infracost breakdown --path . --format json --out-file /tmp/infracost.json
+      - name: Generate Baseline JSON
+        run: infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
-      # Comenta no Pull Request com a tabela de custos
-      - name: Post Infracost comment
+      - name: Upload Baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-base
+          path: /tmp/infracost-base.json
+
+  # 2. Compara o seu código novo com a Baseline
+  Diff:
+    name: 2. Analisar Mudanças
+    needs: Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Download Baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: infracost-base
+          path: /tmp
+
+      - name: Generate Diff JSON
         run: |
-          infracost comment github --path /tmp/infracost.json \
+          infracost diff --path . \
+                         --format json \
+                         --compare-to /tmp/infracost-base.json \
+                         --out-file /tmp/infracost-diff.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Upload Diff
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-diff
+          path: /tmp/infracost-diff.json
+
+  # 3. Posta a tabela no Pull Request
+  Post-Comment:
+    name: 3. Postar Resultados
+    needs: Diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api_key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Download Diff
+        uses: actions/download-artifact@v4
+        with:
+          name: infracost-diff
+          path: /tmp
+
+      - name: Post Infracost comment
+        continue-on-error: true # Garante a caixinha verde no pipeline
+        run: |
+          infracost comment github --path /tmp/infracost-diff.json \
                                    --repo $GITHUB_REPOSITORY \
                                    --pull-request ${{ github.event.pull_request.number }} \
+                                   --github-token ${{ secrets.GITHUB_TOKEN }} \
                                    --behavior update
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}

@@ -16,7 +16,7 @@ variable "public_subnet_id" {
 variable "instance_type" {
   description = "Tipo da instância EC2"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.micro"
 }
 
 variable "db_instance_class" {
